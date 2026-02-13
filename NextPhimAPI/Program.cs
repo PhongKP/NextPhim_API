@@ -20,7 +20,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowNextPhimFE", policy =>
     {
         policy.WithOrigins(
-                "https://www.nextphim.app/",
+                "https://www.nextphim.app",
                 "http://localhost:4200"
               )
               .AllowAnyMethod()
