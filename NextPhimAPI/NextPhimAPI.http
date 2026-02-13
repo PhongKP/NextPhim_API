@@ -1,9 +1,0 @@
-@NextPhimAPI_HostAddress = http://localhost:5124
-
-### Increment view of movie
-POST {{NextPhim_HostAddress}}/api/movies/15341840eedadf2f53ad8571ac6078a2/view
-Content-Type: application/json
-
-### Get top 10 weekly movies
-GET {{NextPhim_HostAddress}}/api/movies/top?type=weekly&limit=10
-Accept: application/json
