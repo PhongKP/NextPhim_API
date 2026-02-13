@@ -13,6 +13,22 @@ builder.WebHost.UseUrls($"http://*:{port}");
 // Add services to the container.
 builder.Services.AddControllers();
 
+
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowNextPhimFE", policy =>
+    {
+        policy.WithOrigins(
+                "https://www.nextphim.app/",
+                "http://localhost:3000",
+                "http://localhost:5173"
+              )
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 // Configure PostgreSQL with EF Core
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PostgresDb")));
@@ -35,6 +51,7 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseCors("AllowNextPhimFE");
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
