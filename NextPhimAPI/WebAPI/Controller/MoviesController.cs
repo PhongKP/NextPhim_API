@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using NextPhimAPI.Application.DTOs;
 using NextPhimAPI.Application.Interfaces;
 
 namespace NextPhimAPI.WebAPI.Controller
@@ -13,10 +14,14 @@ namespace NextPhimAPI.WebAPI.Controller
             _movieStatsService = movieStatsService;
         }
 
-        [HttpPost("{movieId}/increment-view")]
-        public async Task<IActionResult> IncrementView(string movieId)
+        [HttpPost("increment-view")]
+        public async Task<IActionResult> IncrementView([FromBody] IncrementViewRequest request)
         {
-            await _movieStatsService.IncrementViewAsync(movieId);
+            if (request == null || string.IsNullOrEmpty(request.Name) || string.IsNullOrEmpty(request.Slug))
+            {
+                return BadRequest("Invalid request data.");
+            }
+            await _movieStatsService.IncrementViewAsync(request);
             return Ok();
         }
 

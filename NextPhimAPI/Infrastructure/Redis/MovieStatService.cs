@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NextPhimAPI.Application.DTOs;
 using NextPhimAPI.Application.Interfaces;
+using NextPhimAPI.Domain.Entities;
 using NextPhimAPI.Infrastructure.Persistence;
 using StackExchange.Redis;
 using System.Globalization;
@@ -11,11 +12,16 @@ namespace NextPhimAPI.Infrastructure.Redis
     {
         private readonly IDatabase _redis;
         private readonly ApplicationDbContext _dbContext;
+        private readonly IConnectionMultiplexer _redisConn;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public MovieStatService(IConnectionMultiplexer redis, ApplicationDbContext dbContext)
+        public MovieStatService(IConnectionMultiplexer redis, ApplicationDbContext dbContext,
+            IConnectionMultiplexer redisConn, IServiceScopeFactory scope)
         {
             _redis = redis.GetDatabase();
             _dbContext = dbContext;
+            _redisConn = redisConn;
+            _scopeFactory = scope;
         }
 
         public async Task<IEnumerable<MovieTrendResponse>> GetTopTrendingMoviesAsync(string type, int limit)
@@ -53,32 +59,55 @@ namespace NextPhimAPI.Infrastructure.Redis
             }).OrderByDescending(x => x.TotalViews);
         }
 
-        public async Task IncrementViewAsync(string movieId)
+        public Task IncrementViewAsync(IncrementViewRequest request)
         {
-            var now = DateTime.UtcNow;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    var redis = _redisConn.GetDatabase();
 
-            string dailyKey = $"movies:daily:{now:yyyyMMdd}";
-            string monthlyKey = $"movies:monthly:{now:yyyyMM}";
+                    var now = DateTime.UtcNow;
+                    string dailyKey = $"movies:daily:{now:yyyyMMdd}";
+                    string monthlyKey = $"movies:monthly:{now:yyyyMM}";
+                    int weekNum = CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
+                        now, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+                    string weeklyKey = $"movies:weekly:{now.Year}-W{weekNum:D2}";
 
-            int weekNum = CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
-                now,
-                CalendarWeekRule.FirstFourDayWeek,
-                DayOfWeek.Monday
-            );
-            string weeklyKey = $"movies:weekly:{now.Year}-W{weekNum:D2}";
+                    var batch = redis.CreateBatch();
+                    var t1 = batch.SortedSetIncrementAsync(dailyKey, request.Slug, 1);
+                    var t2 = batch.SortedSetIncrementAsync(weeklyKey, request.Slug, 1);
+                    var t3 = batch.SortedSetIncrementAsync(monthlyKey, request.Slug, 1);
 
-            var batch = _redis.CreateBatch();
+                    _ = batch.KeyExpireAsync(dailyKey, TimeSpan.FromDays(2));
+                    _ = batch.KeyExpireAsync(weeklyKey, TimeSpan.FromDays(14));
+                    _ = batch.KeyExpireAsync(monthlyKey, TimeSpan.FromDays(60));
 
-            var t1 = batch.SortedSetIncrementAsync(dailyKey, movieId, 1);
-            var t2 = batch.SortedSetIncrementAsync(weeklyKey, movieId, 1);
-            var t3 = batch.SortedSetIncrementAsync(monthlyKey, movieId, 1);
+                    batch.Execute();
+                    await Task.WhenAll(t1, t2, t3);
 
-            _ = batch.KeyExpireAsync(dailyKey, TimeSpan.FromDays(2));
-            _ = batch.KeyExpireAsync(weeklyKey, TimeSpan.FromDays(14));
-            _ = batch.KeyExpireAsync(monthlyKey, TimeSpan.FromDays(60));
-
-            batch.Execute();
-            await Task.WhenAll(t1, t2, t3);
+                    var movieExists = await dbContext.Movies.AnyAsync(m => m.Slug == request.Slug);
+                    if (!movieExists)
+                    {
+                        dbContext.Movies.Add(new Movie
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Name = request.Name,
+                            Slug = request.Slug,
+                            ThumbUrl = request.ThumbUrl,
+                            TotalViews = 0
+                        });
+                        await dbContext.SaveChangesAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Background Task Error]: {ex.Message}");
+                }
+            });
+            return Task.CompletedTask;
         }
     }
 }

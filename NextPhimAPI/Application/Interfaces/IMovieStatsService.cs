@@ -4,7 +4,7 @@ namespace NextPhimAPI.Application.Interfaces
 {
     public interface IMovieStatsService
     {
-        Task IncrementViewAsync(string movieId);
+        Task IncrementViewAsync(IncrementViewRequest request);
         Task<IEnumerable<MovieTrendResponse>> GetTopTrendingMoviesAsync(string type, int limit);
     }
 }
