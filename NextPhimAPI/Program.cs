@@ -21,8 +21,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "https://www.nextphim.app/",
-                "http://localhost:3000",
-                "http://localhost:5173"
+                "http://localhost:4200"
               )
               .AllowAnyMethod()
               .AllowAnyHeader();
