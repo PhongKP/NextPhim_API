@@ -27,7 +27,6 @@ namespace NextPhimAPI.Infrastructure.Redis
         public async Task<IEnumerable<MovieTrendResponse>> GetTopTrendingMoviesAsync(string type, int limit)
         {
             var now = DateTime.UtcNow;
-
             string key = type.ToLower() switch
             {
                 "daily" => $"movies:daily:{now:yyyyMMdd}",
@@ -42,17 +41,18 @@ namespace NextPhimAPI.Infrastructure.Redis
                 return Enumerable.Empty<MovieTrendResponse>();
             }
 
-            var movieIds = topRedis.Select(x => x.Element.ToString()).ToList();
+            var movieSlugs = topRedis.Select(x => x.Element.ToString()).ToList();
             var movieDetail = await _dbContext.Movies
-                .Where(m => movieIds.Contains(m.Id))
+                .Where(m => movieSlugs.Contains(m.Slug))
                 .ToListAsync();
             return topRedis.Select(r =>
             {
-               var movie = movieDetail.FirstOrDefault(m => m.Id == r.Element.ToString());
+                string currentSlug = r.Element.ToString();
+                var movie = movieDetail.FirstOrDefault(m => m.Slug == currentSlug);
                 return new MovieTrendResponse(
-                    r.Element.ToString(),
+                    movie?.Id ?? "",
                     movie?.Name ?? "Unknown",
-                    movie?.Slug ?? "",
+                    currentSlug,
                     movie?.ThumbUrl ?? "",
                     r.Score
                 );
